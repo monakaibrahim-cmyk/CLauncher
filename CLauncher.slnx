@@ -1,0 +1,22 @@
+<Solution>
+  <Configurations>
+    <Platform Name="ARM64" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/StormLib/">
+    <Project Path="StormLib_Projects/StormLib.vcxproj" Id="78424708-1f6e-4d4b-920c-fb6d26847055">
+      <BuildType Solution="Debug|*" Project="DebugAD" />
+      <BuildType Solution="Release|ARM64" Project="ReleaseUD" />
+      <BuildType Solution="Release|x64" Project="ReleaseUD" />
+      <BuildType Solution="Release|x86" Project="ReleaseAS" />
+      <Platform Solution="*|ARM64" Project="x64" />
+    </Project>
+    <Project Path="StormLib_Projects/StormLib_dll.vcxproj" Id="cb385198-50b1-4cf4-883b-11f042ded6aa">
+      <Platform Solution="*|ARM64" Project="x64" />
+    </Project>
+  </Folder>
+  <Project Path="CLauncher.vcxproj" Id="4424c424-696e-4d80-8c3c-16251c6bc07b">
+    <Deploy />
+  </Project>
+</Solution>

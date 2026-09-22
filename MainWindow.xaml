@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="CLauncher.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:CLauncher"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="CLauncher">
+
+    <Grid x:Name="RootGrid" RequestedTheme="Dark" Background="{StaticResource LauncherBg}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48"/>    <!-- Titlebar -->
+            <RowDefinition Height="*"/>     <!-- Hero banner (fills remaining) -->
+            <RowDefinition Height="Auto"/>  <!-- Action bar -->
+            <RowDefinition Height="Auto"/>  <!-- News strip -->
+        </Grid.RowDefinitions>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!--                 ROW 0 — CUSTOM TITLEBAR                -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <Grid x:Name="AppTitleBar" Grid.Row="0" Height="48"
+              Background="Transparent" VerticalAlignment="Top">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="16"/>    <!-- Left margin -->
+                <ColumnDefinition Width="Auto"/>  <!-- Logo -->
+                <ColumnDefinition Width="*"/>     <!-- Drag spacer -->
+                <ColumnDefinition Width="Auto"/>  <!-- Settings button -->
+                <ColumnDefinition Width="140"/>   <!-- Caption button reserve -->
+            </Grid.ColumnDefinitions>
+
+            <!-- App Logo -->
+            <TextBlock Grid.Column="1"
+                       Text="CLauncher"
+                       FontSize="16" FontWeight="Bold"
+                       Foreground="{StaticResource TextPrimary}"
+                       VerticalAlignment="Center"
+                       IsHitTestVisible="False"/>
+
+            <!-- Settings Gear -->
+            <Button x:Name="SettingsButton" Grid.Column="3"
+                    Style="{StaticResource TitleBarButtonStyle}">
+                <FontIcon Glyph="&#xE713;" FontSize="15"
+                          Foreground="{StaticResource TextMuted}"/>
+                <Button.Flyout>
+                    <Flyout Placement="BottomEdgeAlignedRight">
+                        <StackPanel Spacing="16" Width="320" RequestedTheme="Dark">
+                            <TextBlock Text="Settings"
+                                       FontSize="20" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimary}"/>
+
+                            <TextBox x:Name="GamePathTextBox"
+                                     Header="Game Executable Path"
+                                     PlaceholderText="C:\Games\MyGame\game.exe"
+                                     FontSize="13"/>
+
+                            <TextBox x:Name="LaunchArgsTextBox"
+                                     Header="Launch Arguments"
+                                     PlaceholderText="-fullscreen -dx12"
+                                     FontSize="13"/>
+
+                            <Rectangle Height="1" Fill="{StaticResource Divider}" Margin="0,4"/>
+
+                            <Button x:Name="TestDownloadButton"
+                                    Content="⬇ Test Download Progress"
+                                    Click="TestDownloadButton_Click"
+                                    HorizontalAlignment="Stretch"
+                                    FontSize="13"/>
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+        </Grid>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!--                  ROW 1 — HERO BANNER                   -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="1" x:Name="HeroBanner">
+            <!-- Placeholder gradient background (replace with game artwork) -->
+            <Grid>
+                <Grid.Background>
+                    <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
+                        <GradientStop Color="#1A1A3E" Offset="0.0"/>
+                        <GradientStop Color="#0F1B3D" Offset="0.3"/>
+                        <GradientStop Color="#0A1628" Offset="0.7"/>
+                        <GradientStop Color="#0D0D1A" Offset="1.0"/>
+                    </LinearGradientBrush>
+                </Grid.Background>
+
+                <!-- Decorative accent glow -->
+                <Ellipse Width="400" Height="400" Opacity="0.08"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Margin="0,-60,0,0">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush>
+                            <GradientStop Color="#00D4FF" Offset="0"/>
+                            <GradientStop Color="#00000000" Offset="1"/>
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
+            </Grid>
+
+            <!--
+                To use a real hero image, uncomment below and set Source:
+                <Image Source="Assets/hero_banner.png" Stretch="UniformToFill"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            -->
+
+            <!-- Bottom gradient overlay for text readability -->
+            <Grid VerticalAlignment="Bottom" Height="180">
+                <Grid.Background>
+                    <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
+                        <GradientStop Color="#000D0D1A" Offset="0.0"/>
+                        <GradientStop Color="#CC0D0D1A" Offset="0.6"/>
+                        <GradientStop Color="#FF0D0D1A" Offset="1.0"/>
+                    </LinearGradientBrush>
+                </Grid.Background>
+            </Grid>
+
+            <!-- Game Title & Version -->
+            <StackPanel x:Name="HeroOverlay" VerticalAlignment="Bottom"
+                        Padding="32,0,32,24">
+                <TextBlock x:Name="GameTitleText"
+                           Text="ECLIPSE REALM"
+                           FontSize="42" FontWeight="Bold"
+                           Foreground="{StaticResource TextPrimary}"
+                           CharacterSpacing="80"/>
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,6,0,0">
+                    <Border Background="#20FFFFFF" CornerRadius="4"
+                            Padding="8,3">
+                        <TextBlock x:Name="GameVersionText"
+                                   Text="v1.2.3"
+                                   FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!--                 ROW 2 — ACTION BAR                     -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <Grid x:Name="ActionBar" Grid.Row="2"
+              Background="{StaticResource PanelBg}"
+              Padding="32,0,32,0" MinHeight="80">
+
+            <!-- ── Play Panel (visible when Ready / Playing) ── -->
+            <Grid x:Name="PlayPanel">
+                <TextBlock x:Name="StatusText"
+                           Text="Up to date"
+                           Foreground="{StaticResource TextMuted}"
+                           FontSize="13"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Left"/>
+
+                <Button x:Name="PlayButton"
+                        Content="PLAY"
+                        Style="{StaticResource PlayButtonStyle}"
+                        Click="PlayButton_Click"/>
+            </Grid>
+
+            <!-- ── Progress Panel (visible during Download / Install) ── -->
+            <Grid x:Name="ProgressPanel" Visibility="Collapsed"
+                  VerticalAlignment="Center" Margin="0,14,0,14">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>  <!-- Progress bar -->
+                    <RowDefinition Height="Auto"/>  <!-- Stats row -->
+                </Grid.RowDefinitions>
+
+                <!-- Progress Bar -->
+                <ProgressBar x:Name="DownloadProgressBar" Grid.Row="0"
+                             Height="8" CornerRadius="4"
+                             Minimum="0" Maximum="100" Value="0"
+                             Foreground="{StaticResource AccentCyan}"
+                             Background="{StaticResource ProgressTrack}"/>
+
+                <!-- Stats Row -->
+                <Grid Grid.Row="1" Margin="0,10,0,0">
+                    <!-- Left: Status + Bytes -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left"
+                                Spacing="12" VerticalAlignment="Center">
+                        <TextBlock x:Name="DownloadStatusText"
+                                   Text="Downloading update..."
+                                   Foreground="{StaticResource TextPrimary}"
+                                   FontSize="13"/>
+                        <TextBlock x:Name="DownloadBytesText"
+                                   Text="0 MB / 0 MB"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="13"/>
+                    </StackPanel>
+
+                    <!-- Right: %, Speed, ETA, Cancel -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                                Spacing="16" VerticalAlignment="Center">
+                        <TextBlock x:Name="DownloadPercentText"
+                                   Text="0%"
+                                   Foreground="{StaticResource AccentCyan}"
+                                   FontWeight="Bold" FontSize="14"/>
+                        <TextBlock x:Name="DownloadSpeedText"
+                                   Text="0 MB/s"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="13"/>
+                        <TextBlock x:Name="DownloadETAText"
+                                   Text="ETA: --"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="13"/>
+                        <Button x:Name="CancelButton"
+                                Content="Cancel"
+                                Style="{StaticResource CancelLinkStyle}"
+                                Click="CancelDownload_Click"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!--                  ROW 3 — NEWS STRIP                    -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <Grid x:Name="NewsStrip" Grid.Row="3"
+              Background="{StaticResource NewsStripBg}"
+              Padding="32,0,32,0" Height="40">
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center" Spacing="10">
+                <FontIcon Glyph="&#xE789;" FontSize="12"
+                          Foreground="{StaticResource TextMuted}"/>
+                <TextBlock x:Name="NewsItem1"
+                           Text="Season 3 launches December 15 — New maps and ranked rewards"
+                           Foreground="{StaticResource TextMuted}" FontSize="12"
+                           TextTrimming="CharacterEllipsis" MaxWidth="480"/>
+                <TextBlock Text="│"
+                           Foreground="{StaticResource Divider}" FontSize="12"/>
+                <TextBlock x:Name="NewsItem2"
+                           Text="Patch 1.2.3 hotfix — Balance changes and bug fixes"
+                           Foreground="{StaticResource TextMuted}" FontSize="12"
+                           TextTrimming="CharacterEllipsis" MaxWidth="480"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!--              RESPONSIVE VISUAL STATES                  -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup>
+                <!-- Wide: >= 1024px -->
+                <VisualState x:Name="WideState">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="1024"/>
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="GameTitleText.FontSize" Value="42"/>
+                        <Setter Target="PlayButton.Width" Value="200"/>
+                        <Setter Target="PlayButton.Height" Value="52"/>
+                        <Setter Target="ActionBar.Padding" Value="32,0,32,0"/>
+                        <Setter Target="HeroOverlay.Padding" Value="32,0,32,24"/>
+                        <Setter Target="NewsStrip.Padding" Value="32,0,32,0"/>
+                        <Setter Target="NewsItem1.MaxWidth" Value="480"/>
+                        <Setter Target="NewsItem2.Visibility" Value="Visible"/>
+                    </VisualState.Setters>
+                </VisualState>
+
+                <!-- Medium: >= 800px -->
+                <VisualState x:Name="MediumState">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="800"/>
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="GameTitleText.FontSize" Value="32"/>
+                        <Setter Target="PlayButton.Width" Value="180"/>
+                        <Setter Target="PlayButton.Height" Value="48"/>
+                        <Setter Target="ActionBar.Padding" Value="24,0,24,0"/>
+                        <Setter Target="HeroOverlay.Padding" Value="24,0,24,20"/>
+                        <Setter Target="NewsStrip.Padding" Value="24,0,24,0"/>
+                        <Setter Target="NewsItem1.MaxWidth" Value="340"/>
+                        <Setter Target="NewsItem2.Visibility" Value="Visible"/>
+                    </VisualState.Setters>
+                </VisualState>
+
+                <!-- Narrow: < 800px -->
+                <VisualState x:Name="NarrowState">
+                    <VisualState.Setters>
+                        <Setter Target="GameTitleText.FontSize" Value="24"/>
+                        <Setter Target="PlayButton.Width" Value="160"/>
+                        <Setter Target="PlayButton.Height" Value="44"/>
+                        <Setter Target="ActionBar.Padding" Value="16,0,16,0"/>
+                        <Setter Target="HeroOverlay.Padding" Value="16,0,16,16"/>
+                        <Setter Target="NewsStrip.Padding" Value="16,0,16,0"/>
+                        <Setter Target="NewsItem1.MaxWidth" Value="260"/>
+                        <Setter Target="NewsItem2.Visibility" Value="Collapsed"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+    </Grid>
+</Window>
+
