@@ -16,10 +16,176 @@
 #include <string_view>
 #include <vector>
 
+namespace winrt::CLauncher::Core::Globals
+{
+	inline std::string REALMLISTS_TEXT_PATH = "Data\\enUS";
+	inline std::string REALMLISTS_TEXT_FILE = "realmlist.wtf";
+
+	inline std::string CONFIG_WTF_FOLDER_PATH = "WTF";
+	inline std::string CONFIG_WTF_FILE = "Config.wtf";
+
+	inline std::string MFIL_FILE = "WoW.mfil";
+
+	inline std::string REMOTE_AUTH_API = "https://127.0.0.1/api/v1";
+
+	inline const std::string PUBLIC_KEY_PEM = R"(
+			-----BEGIN PUBLIC KEY-----
+			MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0O0c690RnZ02SPLUL4jq
+			Vz8NhcsJ0iG1WpkiierERyKN/uz3lZ4PBSs9cIPZiaQ+8dKsEVEryc3FF+IpxrDy
+			bzVTBtE4vDbOZilTFej2FSYLUEC1SN6np8hMko6glejjp2sjXR8zrgO0Dj4fxqh2
+			DrwpLtNqO6jrtjatRVdSzw5QIuKk8NYyqeyWvT2r28y8elZfUfE0KFEDg9hlMqek
+			DpKO1nj+OqSQNKXSdke5MDmjxTo2zZCfK5Skj+thy2h9UUR+gv3ECfBvCQbVwDXF
+			HJxSCrBq90u/BDGZNdDp2EHMTuzZKSwTBZhHg2z4hTGzTkan9T3gG/XHV1qDuPwe
+			VQIDAQAB
+			-----END PUBLIC KEY-----
+		)";
+
+	inline std::string MANIFEST_KEY = "wotlk";
+	inline std::string ENCRYPTION_KEY = "WOTLK";
+}
+
 struct CONFIG
 {
 	bool szConsole;
 	bool szDebug;
+};
+
+struct PLAYER_LOGIN
+{
+	std::uint64_t szVersion;
+	std::string szUsername;
+	std::string szPassword;
+	std::string szRealmName;
+
+	bool alwaysSignedIn;
+
+	static std::filesystem::path DIRECTORY_FULL_PATH()
+	{
+		return winrt::CLauncher::Core::Helper::GET_ROOT_DIRECTORY();
+	}
+
+	static inline bool LOAD_ENCRYPTED_DATA(const unsigned char* key, PLAYER_LOGIN& player)
+	{
+		std::filesystem::path root = DIRECTORY_FULL_PATH() / "Player.dat";
+		std::ifstream file(root, std::ios::binary);
+
+		if (!file.is_open())
+		{
+			LOG_ERROR("Failed to open file for reading: {}", root.string());
+
+			return false;
+		}
+
+		unsigned char iv[winrt::CLauncher::Core::LoginSaveCrypto::IV_SIZE];
+		unsigned char tag[winrt::CLauncher::Core::LoginSaveCrypto::TAG_SIZE];
+		file.read(reinterpret_cast<char*>(iv), winrt::CLauncher::Core::LoginSaveCrypto::IV_SIZE);
+		file.read(reinterpret_cast<char*>(tag), winrt::CLauncher::Core::LoginSaveCrypto::TAG_SIZE);
+
+		uint32_t cipher_length = 0;
+		file.read(reinterpret_cast<char*>(&cipher_length), sizeof(cipher_length));
+
+		std::vector<unsigned char> chiper(cipher_length);
+		file.read(reinterpret_cast<char*>(chiper.data()), cipher_length);
+		file.close();
+
+		std::vector<unsigned char> plain(cipher_length);
+		int plain_length = 0;
+
+		if (!winrt::CLauncher::Core::LoginSaveCrypto::DECRYPT_DATA(chiper.data(), static_cast<int>(chiper.size()), key, iv, tag, plain.data(), plain_length))
+		{
+			LOG_ERROR("Decryption failed! File may be tampered with or the key is incorrect.");
+
+			return false;
+		}
+
+		size_t offset = 0;
+
+		auto readString = [&plain, &offset](std::string& str)
+		{
+			if (offset + sizeof(uint32_t) > plain.size())
+			{
+				return false;
+			}
+
+			uint32_t length = *reinterpret_cast<const uint32_t*>(&plain[offset]);
+			offset += sizeof(uint32_t);
+
+			if (offset + length > plain.size())
+			{
+				return false;
+			}
+
+			str.assign(reinterpret_cast<const char*>(&plain[offset]), length);
+			offset += length;
+
+			return true;
+		};
+
+		if (!readString(player.szUsername) || !readString(player.szPassword) || !readString(player.szRealmName))
+		{
+			LOG_ERROR("Failed to deserialize player data streams.");
+
+			return false;
+		}
+
+		return true;
+	}
+
+	static inline bool SAVE_ENCRYPTED_DATA(const PLAYER_LOGIN& player, const unsigned char* key)
+	{
+		std::filesystem::path root = DIRECTORY_FULL_PATH() / "Player.dat";
+		std::vector<unsigned char> plaintext;
+
+		auto appendString = [&plaintext](const std::string& str)
+		{
+			uint32_t len = static_cast<uint32_t>(str.size());
+			const unsigned char* lenBytes = reinterpret_cast<const unsigned char*>(&len);
+			plaintext.insert(plaintext.end(), lenBytes, lenBytes + sizeof(len));
+			plaintext.insert(plaintext.end(), str.begin(), str.end());
+		};
+
+		appendString(player.szUsername);
+		appendString(player.szPassword);
+		appendString(player.szRealmName);
+
+		unsigned char iv[winrt::CLauncher::Core::LoginSaveCrypto::IV_SIZE];
+
+		if (RAND_bytes(iv, winrt::CLauncher::Core::LoginSaveCrypto::IV_SIZE) != 1)
+		{
+			LOG_ERROR("Failed to generate random IV.");
+
+			return false;
+		}
+
+		std::vector<unsigned char> ciphertext(plaintext.size());
+		unsigned char tag[winrt::CLauncher::Core::LoginSaveCrypto::TAG_SIZE];
+
+		if (!winrt::CLauncher::Core::LoginSaveCrypto::ENCRYPT_DATA(plaintext.data(), static_cast<int>(plaintext.size()), key, iv, ciphertext.data(), tag))
+		{
+			LOG_ERROR("Encryption failed.");
+
+			return false;
+		}
+
+		std::ofstream outFile(root, std::ios::binary);
+
+		if (!outFile.is_open())
+		{
+			LOG_ERROR("Failed to open file {} for writing.", root.string());
+
+			return false;
+		}
+
+		outFile.write(reinterpret_cast<char*>(iv), winrt::CLauncher::Core::LoginSaveCrypto::IV_SIZE);
+		outFile.write(reinterpret_cast<char*>(tag), winrt::CLauncher::Core::LoginSaveCrypto::TAG_SIZE);
+
+		uint32_t cipherLen = static_cast<uint32_t>(ciphertext.size());
+
+		outFile.write(reinterpret_cast<char*>(&cipherLen), sizeof(cipherLen));
+		outFile.write(reinterpret_cast<char*>(ciphertext.data()), cipherLen);
+
+		return true;
+	}
 };
 
 struct REALM_LISTS
@@ -331,7 +497,7 @@ struct CONFIG_WTF
 
 		if (!std::filesystem::exists(directory))
 		{
-			LOG_INFO("Directory not found, creating: ", directory.string());
+			LOG_INFO("Directory not found, creating: {}", directory.string());
 
 			std::filesystem::create_directories(directory);
 		}
@@ -547,7 +713,7 @@ struct MFIL
 			}
 		}
 
-		LOG_INFO("mFIL loaded - Version={} | Servers={} | Manifest={}", data.szVersion, std::to_string(data.szServers.size()), data.szManifestPartial);
+		LOG_INFO("mFIL loaded - Version={} | Servers={} | Manifest={}", data.szVersion, data.szServers.back().szServerName, data.szManifestPartial);
 
 		return data;
 	}
@@ -823,7 +989,7 @@ struct MPQ_MANIFEST
 				Entries.szPath = "base";
 				hasEntry = true;
 			}
-			else if (key == "name")
+			else if (key == ("name"))
 			{
 				if (hasEntry)
 				{
@@ -929,61 +1095,40 @@ struct ChecksumHelper
 	}
 };
 
-namespace winrt::CLauncher::Core
+namespace winrt::CLauncher::Core::Globals
 {
-	class Globals
-	{
-	public:
-		static inline std::string REALMLISTS_TEXT_PATH = "Data\\enUS";
-		static inline std::string REALMLISTS_TEXT_FILE = "realmlist.wtf";
+	inline REALM_LISTS CURRENT_REALM_LIST = REALM_LISTS::Load();
+	inline CONFIG_WTF CURRENT_CONFIG_WTF = CONFIG_WTF::Load();
+	inline MFIL CURRENT_MFIL = MFIL::Load();
 
-		static inline std::string CONFIG_WTF_FOLDER_PATH = "WTF";
-		static inline std::string CONFIG_WTF_FILE = "Config.wtf";
-
-		static inline std::string MFIL_FILE = "WoW.mfil";
-
-		static inline std::string REMOTE_AUTH_TOKEN = "hLFkyoJwkDZgagzfZ8ZmxpgyOz3K4RqLKeaQya6uFt2lhVFOfbyamTj9crYk0Df1";
-
-		static inline std::string MANIFEST_KEY = "wotlk";
-
-		static inline REALM_LISTS CURRENT_REALM_LIST;
-		static inline CONFIG_WTF CURRENT_CONFIG_WTF;
-		static inline MFIL CURRENT_MFIL;
-
-		static inline CLIENT_MANIFEST CURRENT_CLIENT_MANIFEST {
-			"2",
-			{}
-		};
-
-		static inline MPQ_MANIFEST CURRENT_MPQ_MANIFEST {
-			"3",
-			"base",
-			{}
-		};
-
-
-		static std::string PATCHES_NOTE_REMOTE_BASE_URL()
-		{
-			if (!CURRENT_MFIL.szServers.empty())
-			{
-				return CURRENT_MFIL.szServers.front().szUrl;
-			}
-
-			return {};
-		}
-
-		static std::string PATCH_REMOTE_BASE_URL()
-		{
-			if (!CURRENT_MFIL.szServers.empty())
-			{
-				return CURRENT_MFIL.szServers.front().szUrl;
-			}
-
-			return {};
-		}
+	inline CLIENT_MANIFEST CURRENT_CLIENT_MANIFEST {
+		"2",
+		{}
 	};
 
-	inline REALM_LISTS Globals::CURRENT_REALM_LIST = REALM_LISTS::Load();
-	inline CONFIG_WTF Globals::CURRENT_CONFIG_WTF = CONFIG_WTF::Load();
-	inline MFIL Globals::CURRENT_MFIL = MFIL::Load();
+	inline MPQ_MANIFEST CURRENT_MPQ_MANIFEST {
+		"3",
+		"base",
+		{}
+	};
+
+	inline std::string PATCHES_NOTE_REMOTE_BASE_URL()
+	{
+		if (!CURRENT_MFIL.szServers.empty())
+		{
+			return CURRENT_MFIL.szServers.front().szUrl;
+		}
+
+		return {};
+	}
+
+	inline std::string PATCH_REMOTE_BASE_URL()
+	{
+		if (!CURRENT_MFIL.szServers.empty())
+		{
+			return CURRENT_MFIL.szServers.front().szUrl;
+		}
+
+		return {};
+	}
 }

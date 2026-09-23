@@ -2,17 +2,18 @@
 
 #include "../Helper.h"
 
-#include <cstdint>
+#include <chrono>
 #include <cstddef>
-#include <string>
-#include <string_view>
-#include <format>
-#include <print>
+#include <cstdint>
+#include <ctime>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <mutex>
-#include <chrono>
-#include <ctime>
+#include <print>
+#include <string>
+#include <string_view>
+#include <windows.h>
 
 namespace filesystem = std::filesystem;
 
@@ -81,6 +82,8 @@ namespace winrt::CLauncher::Core::Logging
 	winrt::CLauncher::Core::Logging::Logs::write(SeverityLevel::Verbose, __FILE__, __LINE__, __FUNCTION__, std::format(__VA_ARGS__))
 #define LOG_TRACE(...) \
 	winrt::CLauncher::Core::Logging::Logs::write(SeverityLevel::Trace, __FILE__, __LINE__, __FUNCTION__, std::format(__VA_ARGS__))
+#define LOG_DEBUG(...) \
+	winrt::CLauncher::Core::Logging::Logs::write(SeverityLevel::Debug, __FILE__, __LINE__, __FUNCTION__, std::format(__VA_ARGS__))
 #define LOG_INFO(...) \
 	winrt::CLauncher::Core::Logging::Logs::write(SeverityLevel::Info, __FILE__, __LINE__, __FUNCTION__, std::format(__VA_ARGS__))
 #define LOG_HTTP(...) \

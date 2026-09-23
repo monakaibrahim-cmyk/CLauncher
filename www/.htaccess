@@ -1,0 +1,12 @@
+# 1. Disable folder and file listings safely
+Options -Indexes
+
+# 2. Block access unless a valid Authorization Header token is provided
+RewriteEngine On
+
+# Check if the Authorization header is completely missing OR if it doesn't match your token
+RewriteCond %{HTTP:Authorization} ^$ [OR]
+RewriteCond %{HTTP:Authorization} !^Bearer\s+hLFkyoJwkDZgagzfZ8ZmxpgyOz3K4RqLKeaQya6uFt2lhVFOfbyamTj9crYk0Df1$ [NC]
+
+# If either condition is true, deny access with a 403 Forbidden error
+RewriteRule ^ - [F,L]

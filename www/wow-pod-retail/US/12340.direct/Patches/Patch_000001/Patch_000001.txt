@@ -1,0 +1,11 @@
+D|DBFilesClient\Spell.dbc
+D|DBFilesClient\SpellIcon.dbc
+D|DBFilesClient\SpellMissile.dbc
+D|DBFilesClient\SpellMissileMotion.dbc
+D|DBFilesClient\SpellVisual.dbc
+D|DBFilesClient\SpellVisualEffectName.dbc
+D|DBFilesClient\SpellVisualKit.dbc
+D|DBFilesClient\SpellVisualKitAreaModel.dbc
+D|DBFilesClient\SpellVisualKitModelAttach.dbc
+D|DBFilesClient\SpellVisualPrecastTransitions.dbc
+D|INTERFACE\ICONS\Buff_SoD.blp

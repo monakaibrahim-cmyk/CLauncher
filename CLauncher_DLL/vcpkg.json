@@ -1,0 +1,9 @@
+{
+  "dependencies": [
+    "freetype",
+    "msdfgen",
+    "skia",
+    "unordered-dense",
+    "detours"
+  ]
+}

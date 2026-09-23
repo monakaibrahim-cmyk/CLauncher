@@ -15,6 +15,9 @@
     <ClCompile Include="Core\Logging\Logs.cpp">
       <Filter>Core\Logging</Filter>
     </ClCompile>
+    <ClCompile Include="Core\API\Payload.cpp">
+      <Filter>Core\API</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
@@ -23,6 +26,16 @@
     </ClInclude>
     <ClInclude Include="Core\Helper.h">
       <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Globals.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Client\Patch.h">
+      <Filter>Core\Client</Filter>
+    </ClInclude>
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="Core\API\Payload.h">
+      <Filter>Core\API</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -47,6 +60,7 @@
     <Image Include="Assets\LockScreenLogo.scale-200.png">
       <Filter>Assets</Filter>
     </Image>
+    <Image Include="Icons\app.ico" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Assets">
@@ -58,6 +72,12 @@
     <Filter Include="Core\Logging">
       <UniqueIdentifier>{bc077d49-7e54-4cbc-9f33-619367974ba7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Core\Client">
+      <UniqueIdentifier>{9f09307f-120b-47cb-be1c-6c21a1a854ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core\API">
+      <UniqueIdentifier>{cb1c36c4-fc6e-4780-bc76-337617d80e99}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Text Include="readme.txt" />
@@ -66,14 +86,14 @@
     <Manifest Include="app.manifest" />
   </ItemGroup>
   <ItemGroup>
-    <AppxManifest Include="Package.appxmanifest" />
-  </ItemGroup>
-  <ItemGroup>
     <None Include="packages.config" />
     <None Include=".clang-format" />
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="$(MSBuildThisFileDirectory)..\..\natvis\wil.natvis" />
     <Natvis Include="$(MSBuildThisFileDirectory)..\..\natvis\wil.natstepfilter" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="CLauncher.rc" />
   </ItemGroup>
 </Project>

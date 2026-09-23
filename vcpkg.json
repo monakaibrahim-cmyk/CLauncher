@@ -1,0 +1,9 @@
+{
+  "dependencies": [
+    "curl",
+    "jwt-cpp",
+    "nlohmann-json",
+    "openssl",
+    "stormlib"
+  ]
+}

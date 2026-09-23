@@ -1,18 +1,26 @@
 #pragma once
 
+#include <windows.h>
+#include <wininet.h>
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <openssl/evp.h>
+#include <openssl/rand.h>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#pragma comment(lib, "wininet.lib")
 
 /**
  * @name Text Formatting Controls
@@ -152,7 +160,7 @@ namespace winrt::CLauncher::Core
 		static inline std::string GET_TIMESTAMP()
 		{
 			auto now = std::chrono::system_clock::now();
-			auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 100;
+			auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 			auto time = std::chrono::system_clock::to_time_t(now);
 
 			std::tm buffer {};
@@ -205,6 +213,8 @@ namespace winrt::CLauncher::Core
 					return static_cast<char>(std::tolower(c));
 				}
 			);
+
+			return value;
 		}
 
 		static inline bool STARTS_WITH_CASE_SENSITIVE(const std::string& value, std::string_view prefix)
@@ -248,6 +258,56 @@ namespace winrt::CLauncher::Core
 			return lines;
 		}
 
+		static inline std::string GET_MACHINE_GUID()
+		{
+			HKEY hKey;
+			char value[64];
+			DWORD length = sizeof(value);
+
+			if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Cryptography", 0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS)
+			{
+				if (RegQueryValueExA(hKey, "MachineGuid", NULL, NULL, (LPBYTE)value, &length) == ERROR_SUCCESS)
+				{
+					RegCloseKey(hKey);
+
+					return std::string(value);
+				}
+
+				RegCloseKey(hKey);
+			}
+
+			return "UNKNOWN-GUID";
+		}
+
+		static inline std::string FETCH_PUBLIC_USER_IP()
+		{
+			std::string hAddress = "127.0.0.1";
+			HINTERNET hInternet = InternetOpenA("CLauncher", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+
+			if (hInternet)
+			{
+				HINTERNET hConnect = InternetOpenUrlA(hInternet, "https://ipify.org", NULL, 0, INTERNET_FLAG_RELOAD, 0);
+				
+				if (hConnect)
+				{
+					char buffer[64];
+					DWORD bytes = 0;
+
+					if (InternetReadFile(hConnect, buffer, sizeof(buffer) - 1, &bytes) && bytes > 0)
+					{
+						buffer[bytes] = '\0';
+						hAddress = std::string(buffer);
+					}
+
+					InternetCloseHandle(hConnect);
+				}
+
+				InternetCloseHandle(hInternet);
+			}
+
+			return hAddress;
+		}
+
 		static inline bool TRY_PARSE_INT64(const std::string& value, std::int64_t& result)
 		{
 			try
@@ -275,7 +335,7 @@ namespace winrt::CLauncher::Core
 			try
 			{
 				std::size_t consumed = 0;
-				const auto parsed = std::stoll(value, &consumed);
+				const auto parsed = std::stoi(value, &consumed);
 
 				if (consumed != value.size())
 				{
@@ -357,6 +417,234 @@ namespace winrt::CLauncher::Core
 		static inline std::vector<std::uint8_t> XOR(std::string_view data, const std::string& key)
 		{
 			return XOR( std::vector<std::uint8_t>(data.begin(), data.end()), key);
+		}
+
+		static inline bool READ_FILE(const char* path, std::vector<char>& content)
+		{
+			std::ifstream file(path, std::ios::binary);
+			
+			if (!file)
+			{
+				return false;
+			}
+
+			content.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+
+			return true;
+		}
+
+		static inline bool WRITE_FILE(const char* path, const std::vector<char>& content)
+		{
+			std::ofstream file(path, std::ios::binary | std::ios::trunc);
+
+			if (!file)
+			{
+				return false;
+			}
+
+			file.write(content.data(), content.size());
+
+			return true;
+		}
+
+		static inline unsigned VIRTUAL_ADDRESS_2_RAW_OFFSET(char* image, unsigned address)
+		{
+			auto* dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(image);
+			auto* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(&image[dosHeader->e_lfanew]);
+			auto* header = IMAGE_FIRST_SECTION(ntHeaders);
+
+			for (size_t i = 0; i < ntHeaders->FileHeader.NumberOfSections; i++)
+			{
+				DWORD begin = ntHeaders->OptionalHeader.ImageBase + header->VirtualAddress;
+				DWORD end = begin + header->Misc.VirtualSize;
+
+				if (address >= begin && address < end)
+				{
+					return address - begin + header->PointerToRawData;
+				}
+					
+				header++;
+			}
+
+			return 0;
+		}
+
+		static inline bool CONVERT_HEX_STRING_2_BYTE_ARRAY(const char* hex, std::vector<char>& result)
+		{
+			size_t hexLen = strlen(hex);
+			if (hexLen % 2 != 0)
+			{
+				return false;
+			}
+
+			result.clear();
+			result.reserve(hexLen / 2);
+
+			for (size_t i = 0; i < hexLen; i += 2)
+			{
+				int v = 0;
+
+				if (std::from_chars(&hex[i], &hex[i + 2], v, 0x10).ec == std::errc{})
+				{
+					result.push_back(static_cast<char>(v & 0xFF));
+				}
+				else
+				{
+					return false;
+				}
+			}
+
+			return result.size() == (hexLen / 2);
+		}
+
+		static inline bool APPLY_LAA(std::vector<char>& image)
+		{
+			if (image.size() < sizeof(IMAGE_DOS_HEADER))
+			{
+				return false;
+			}
+				
+			auto* dosHeader = reinterpret_cast<PIMAGE_DOS_HEADER>(image.data());
+
+			if (dosHeader->e_lfanew + sizeof(IMAGE_NT_HEADERS) > image.size())
+			{
+				return false;
+			}
+				
+			auto* ntHeaders = reinterpret_cast<PIMAGE_NT_HEADERS>(&image[dosHeader->e_lfanew]);
+			ntHeaders->FileHeader.Characteristics |= IMAGE_FILE_LARGE_ADDRESS_AWARE;
+
+			return true;
+		}
+	};
+
+	class LoginSaveCrypto
+	{
+	public:
+		static inline constexpr int KEY_SIZE = 32;
+		static inline constexpr int IV_SIZE = 12;
+		static inline constexpr int TAG_SIZE = 16;
+		static inline unsigned char KEY[32] = "0123456789012345678901234567890";
+
+		static bool DECRYPT_DATA(
+			const unsigned char* chiper,
+			int cipher_length,
+			const unsigned char* key,
+			const unsigned char* iv,
+			const unsigned char* tag,
+			unsigned char* plain,
+			int& plain_length)
+		{
+			EVP_CIPHER_CTX* context = EVP_CIPHER_CTX_new();
+			if (!context)
+				return false;
+
+			int length = 0;
+			bool success = false;
+			do
+			{
+				if (EVP_DecryptInit_ex(context, EVP_aes_256_gcm(), NULL, NULL, NULL) != 1)
+				{
+					break;
+				}
+					
+				if (EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_IVLEN, IV_SIZE, NULL) != 1)
+				{
+					break;
+				}
+				
+				if (EVP_DecryptInit_ex(context, NULL, NULL, key, iv) != 1)
+				{
+					break;
+				}
+				
+				if (EVP_DecryptUpdate(context, plain, &length, chiper, cipher_length) != 1)
+				{
+					break;
+				}
+				
+				plain_length = length;
+
+				if (EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_TAG, TAG_SIZE, (void*)tag) != 1)
+				{
+					break;
+				}
+				
+
+				if (EVP_DecryptFinal_ex(context, plain + length, &length) > 0)
+				{
+					plain_length += length;
+					success = true;
+				}
+			} while (0);
+
+			EVP_CIPHER_CTX_free(context);
+
+			return success;
+		}
+
+		static inline bool ENCRYPT_DATA(
+			const unsigned char* plain,
+			int plain_length,
+			const unsigned char* key,
+			const unsigned char* iv,
+			unsigned char* chiper,
+			unsigned char* tag
+		)
+		{
+			EVP_CIPHER_CTX* context = EVP_CIPHER_CTX_new();
+			if (!context)
+			{
+				return false;
+			}
+
+			int length = 0;
+			int chiper_length = 0;
+			bool success = false;
+
+			do
+			{
+				if (EVP_EncryptInit_ex(context, EVP_aes_256_gcm(), NULL, NULL, NULL) != 1)
+				{
+					break;
+				}
+
+				if (EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_IVLEN, IV_SIZE, NULL) != 1)
+				{
+					break;
+				}
+
+				if (EVP_EncryptInit_ex(context, NULL, NULL, key, iv) != 1)
+				{
+					break;
+				}
+
+				if (EVP_EncryptUpdate(context, chiper, &length, plain, plain_length) != 1)
+				{
+					break;
+				}
+
+				chiper_length = length;
+
+				if (EVP_EncryptFinal_ex(context, chiper + length, &length) != 1)
+				{
+					break;
+				}
+
+				chiper_length += length;
+
+				if (EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_GET_TAG, TAG_SIZE, tag) != 1)
+				{
+					break;
+				}
+
+				success = true;
+			}
+			while (0);
+
+			EVP_CIPHER_CTX_free(context);
+
+			return success;
 		}
 	};
 }

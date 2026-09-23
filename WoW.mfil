@@ -1,0 +1,4 @@
+version=1
+server=northrend
+	location=http://127.0.0.1/wow-pod-retail/US/12340.direct/
+manifest_partial=wow-12340-8C4550F49AE1755C96DF3642B4967B8A.mfil
