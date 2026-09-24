@@ -455,7 +455,7 @@ namespace winrt::CLauncher::Core
 
 			for (size_t i = 0; i < ntHeaders->FileHeader.NumberOfSections; i++)
 			{
-				DWORD begin = ntHeaders->OptionalHeader.ImageBase + header->VirtualAddress;
+				DWORD begin = static_cast<DWORD>(ntHeaders->OptionalHeader.ImageBase) + header->VirtualAddress;
 				DWORD end = begin + header->Misc.VirtualSize;
 
 				if (address >= begin && address < end)
@@ -515,6 +515,135 @@ namespace winrt::CLauncher::Core
 			ntHeaders->FileHeader.Characteristics |= IMAGE_FILE_LARGE_ADDRESS_AWARE;
 
 			return true;
+		}
+
+		static inline std::string CALCULATE_MD5(const std::filesystem::path& filePath)
+		{
+			if (!std::filesystem::exists(filePath))
+			{
+				return {};
+			}
+
+			std::ifstream file(filePath, std::ios::binary);
+			if (!file.is_open())
+			{
+				return {};
+			}
+
+			EVP_MD_CTX* context = EVP_MD_CTX_new();
+			if (!context)
+			{
+				return {};
+			}
+
+			if (EVP_DigestInit_ex(context, EVP_md5(), nullptr) != 1)
+			{
+				EVP_MD_CTX_free(context);
+				return {};
+			}
+
+			constexpr std::size_t BUFFER_SIZE = 1024ull * 1024ull;
+			std::vector<unsigned char> buffer(BUFFER_SIZE);
+
+			while (true)
+			{
+				file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(buffer.size()));
+				const std::streamsize bytesRead = file.gcount();
+
+				if (bytesRead > 0)
+				{
+					if (EVP_DigestUpdate(context, buffer.data(), static_cast<std::size_t>(bytesRead)) != 1)
+					{
+						EVP_MD_CTX_free(context);
+						return {};
+					}
+				}
+
+				if (file.eof())
+				{
+					break;
+				}
+
+				if (file.fail())
+				{
+					EVP_MD_CTX_free(context);
+					return {};
+				}
+			}
+
+			unsigned char digest[EVP_MAX_MD_SIZE];
+			unsigned int digestLength = 0;
+
+			if (EVP_DigestFinal_ex(context, digest, &digestLength) != 1)
+			{
+				EVP_MD_CTX_free(context);
+				return {};
+			}
+
+			EVP_MD_CTX_free(context);
+
+			std::ostringstream result;
+			for (unsigned int i = 0; i < digestLength; ++i)
+			{
+				result << std::hex << std::nouppercase << std::setw(2) << std::setfill('0') << static_cast<int>(digest[i]);
+			}
+
+			return result.str();
+		}
+
+		static inline std::string ENCODE_URL_PATH(const std::string& path)
+		{
+			std::string result;
+			result.reserve(path.size() + 16);
+
+			for (char c : path)
+			{
+				if (c == ' ')
+				{
+					result += "%20";
+				}
+				else
+				{
+					result += c;
+				}
+			}
+
+			return result;
+		}
+
+		static inline std::string JOIN_URL(const std::string& base, const std::string& path)
+		{
+			if (base.empty())
+			{
+				return ENCODE_URL_PATH(path);
+			}
+			if (path.empty())
+			{
+				return base;
+			}
+
+			std::string encodedPath = ENCODE_URL_PATH(path);
+			std::string result = base;
+			bool baseHasSlash = (!result.empty() && (result.back() == '/' || result.back() == '\\'));
+			bool pathHasSlash = (!encodedPath.empty() && (encodedPath.front() == '/' || encodedPath.front() == '\\'));
+
+			if (baseHasSlash && pathHasSlash)
+			{
+				result.pop_back();
+				result += encodedPath;
+			}
+			else if (!baseHasSlash && !pathHasSlash)
+			{
+				result += '/';
+				result += encodedPath;
+			}
+			else
+			{
+				result += encodedPath;
+			}
+
+			std::replace(result.begin(), result.end(), '\\', '/');
+			return result;
 		}
 	};
 

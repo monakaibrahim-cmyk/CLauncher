@@ -172,6 +172,7 @@
     <Manifest Include="app.manifest" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Core\API\Downloader.h" />
     <ClInclude Include="Core\API\Payload.h" />
     <ClInclude Include="Core\Client\Patch.h" />
     <ClInclude Include="Core\Globals.h" />
@@ -191,6 +192,7 @@
     <Page Include="MainWindow.xaml" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Core\API\Downloader.cpp" />
     <ClCompile Include="Core\API\Payload.cpp" />
     <ClCompile Include="Core\Logging\Logs.cpp" />
     <ClCompile Include="pch.cpp">

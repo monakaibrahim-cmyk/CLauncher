@@ -42,6 +42,10 @@ namespace winrt::CLauncher::Core::Globals
 
 	inline std::string MANIFEST_KEY = "wotlk";
 	inline std::string ENCRYPTION_KEY = "WOTLK";
+
+#ifndef NDEBUG
+	inline std::string DEBUG_AUTH_TOKEN = "hLFkyoJwkDZgagzfZ8ZmxpgyOz3K4RqLKeaQya6uFt2lhVFOfbyamTj9crYk0Df1";
+#endif
 }
 
 struct CONFIG
@@ -625,6 +629,7 @@ struct MFIL
 	std::string szVersion;
 	std::vector<SERVER_ENTRY> szServers;
 	std::string szManifestPartial;
+	std::string szClientPartial;
 
 	static std::filesystem::path FULL_PATH()
 	{
@@ -703,6 +708,10 @@ struct MFIL
 				{
 					data.szManifestPartial = value;
 				}
+				else if (key == "client_partial")
+				{
+					data.szClientPartial = value;
+				}
 			}
 			else
 			{
@@ -713,210 +722,9 @@ struct MFIL
 			}
 		}
 
-		LOG_INFO("mFIL loaded - Version={} | Servers={} | Manifest={}", data.szVersion, data.szServers.back().szServerName, data.szManifestPartial);
+		LOG_INFO("mFIL loaded - Version={} | Servers={} | ManifestPartial={} | ClientPartial={}", data.szVersion, data.szServers.back().szServerName, data.szManifestPartial, data.szClientPartial);
 
 		return data;
-	}
-};
-
-struct CLIENT_CHUNK_ENTRY
-{
-	std::string szHash;
-	std::int64_t szOffset = 0;
-	std::int64_t szSize = 0;
-	std::uint32_t szCheckSum = 0;
-};
-
-struct CLIENT_MANIFEST_ENTRY
-{
-	std::string szFile;
-	std::string szName;
-	std::int64_t szSize = 0;
-	std::uint32_t szCheckSum = 0;
-
-	std::vector<CLIENT_CHUNK_ENTRY> szChunks;
-};
-
-struct CLIENT_MANIFEST
-{
-	std::string szVersion = "2";
-	std::vector<CLIENT_MANIFEST_ENTRY> szFiles;
-
-	static CLIENT_MANIFEST Parse(const std::vector<std::uint8_t>& input)
-	{
-		if (input.empty())
-		{
-			return CLIENT_MANIFEST { "2", {} };
-		}
-
-		std::vector<std::uint8_t> raw = input;
-
-		const std::size_t length = std::min<std::size_t>(8, raw.size());
-
-		const std::string prefix(raw.begin(), raw.begin() + length);
-
-		if (!winrt::CLauncher::Core::Helper::STARTS_WITH_CASE_SENSITIVE(prefix, "version="))
-		{
-			raw = winrt::CLauncher::Core::Helper::XOR(raw, winrt::CLauncher::Core::Globals::MANIFEST_KEY);
-		}
-
-		const std::string content(raw.begin(), raw.end());
-
-		return Parse(content);
-	}
-
-	static CLIENT_MANIFEST Parse(const std::string& content)
-	{
-		CLIENT_MANIFEST manifest;
-
-		manifest.szVersion = "2";
-
-		if (content.empty())
-		{
-			return manifest;
-		}
-
-		std::string current = content;
-
-		if (!winrt::CLauncher::Core::Helper::STARTS_WITH_CASE_SENSITIVE(current, "version="))
-		{
-			const auto decrypted = winrt::CLauncher::Core::Helper::XOR(current, winrt::CLauncher::Core::Globals::MANIFEST_KEY);
-			const std::string decryptedStr(decrypted.begin(), decrypted.end());
-
-			if (winrt::CLauncher::Core::Helper::STARTS_WITH_CASE_SENSITIVE(decryptedStr, "version="))
-			{
-				current = decryptedStr;
-			}
-		}
-
-		CLIENT_MANIFEST_ENTRY Entries;
-		bool hasEntry = false;
-
-		for (const auto& raw : winrt::CLauncher::Core::Helper::SPLIT_LINES(current))
-		{
-			const std::string line = winrt::CLauncher::Core::Helper::TRIM(raw);
-
-			if (line.empty())
-			{
-				continue;
-			}
-
-			const auto index = line.find('=');
-
-			if (index == std::string::npos)
-			{
-				continue;
-			}
-
-			const std::string key = winrt::CLauncher::Core::Helper::TO_LOWER(winrt::CLauncher::Core::Helper::TRIM(line.substr(0,index)));
-			const std::string value = winrt::CLauncher::Core::Helper::TRIM(line.substr(index + 1));
-
-			if (key == "version")
-			{
-				manifest.szVersion = value;
-			}
-			else if (key == "file")
-			{
-				if (hasEntry)
-				{
-					manifest.szFiles.push_back(Entries);
-				}
-
-				Entries = CLIENT_MANIFEST_ENTRY{};
-				Entries.szFile = value;
-				Entries.szName = value;
-				hasEntry = true;
-			}
-			else if (key == "name")
-			{
-				if (hasEntry)
-				{
-					Entries.szName = value;
-				}
-			}
-			else if (key == "size")
-			{
-				if (hasEntry)
-				{
-					std::int64_t size{};
-
-					if (winrt::CLauncher::Core::Helper::TRY_PARSE_INT64(value, size))
-					{
-						Entries.szSize = size;
-					}
-				}
-			}
-			else if (key == "checksum")
-			{
-				if (hasEntry)
-				{
-					std::uint32_t checksum{};
-
-					if (winrt::CLauncher::Core::Helper::TRY_PARSE_INT32_HEX(value, checksum))
-					{
-						Entries.szCheckSum = checksum;
-					}
-				}
-			}
-			else if (key == "chunks")
-			{
-				//
-			}
-			else if (key == "chunk")
-			{
-				if (!hasEntry)
-				{
-					continue;
-				}
-
-				std::vector<std::string> parts;
-				std::stringstream ss(value);
-				std::string part;
-
-				while (std::getline(ss, part, ','))
-				{
-					parts.push_back(winrt::CLauncher::Core::Helper::TRIM(part));
-				}
-
-				if (parts.size() >= 3)
-				{
-					CLIENT_CHUNK_ENTRY chunk;
-					chunk.szHash = parts[0];
-					std::int64_t offset{};
-
-					if (winrt::CLauncher::Core::Helper::TRY_PARSE_INT64(parts[1], offset))
-					{
-						chunk.szOffset = offset;
-					}
-
-					std::int64_t size{};
-
-					if (winrt::CLauncher::Core::Helper::TRY_PARSE_INT64(parts[2], size))
-					{
-						chunk.szSize = size;
-					}
-
-					if (parts.size() >= 4)
-					{
-						std::uint32_t checksum{};
-
-						if (winrt::CLauncher::Core::Helper::TRY_PARSE_INT32_HEX(parts[3], checksum))
-						{
-							chunk.szCheckSum = checksum;
-						}
-					}
-
-					Entries.szChunks.push_back(chunk);
-				}
-			}
-		}
-
-		if (hasEntry)
-		{
-			manifest.szFiles.push_back(Entries);
-		}
-
-		return manifest;
 	}
 };
 
@@ -925,6 +733,7 @@ struct MPQ_MANIFEST_ENTRY
 	std::string szFile;
 	std::string szName;
 	std::int64_t szSize = 0;
+	std::string szChecksum;
 	int szFileVersion = 0;
 	int szFlags = 0;
 	std::string szPath;
@@ -1006,6 +815,151 @@ struct MPQ_MANIFEST
 					{
 						Entries.szSize = size;
 					}
+				}
+			}
+			else if (key == "checksum")
+			{
+				if (hasEntry)
+				{
+					Entries.szChecksum = value;
+				}
+			}
+			else if (key == "fileversion")
+			{
+				if (hasEntry)
+				{
+					int version{};
+
+					if (winrt::CLauncher::Core::Helper::TRY_PARSE_INT(value, version))
+					{
+						Entries.szFileVersion = version;
+					}
+				}
+			}
+			else if (key == "flags")
+			{
+				if (hasEntry)
+				{
+					int flags{};
+
+					if (winrt::CLauncher::Core::Helper::TRY_PARSE_INT(value, flags))
+					{
+						Entries.szFlags = flags;
+					}
+				}
+			}
+			else if (key == "path")
+			{
+				if (hasEntry)
+				{
+					Entries.szPath = value;
+				}
+			}
+		}
+
+		if (hasEntry)
+		{
+			manifest.szFiles.push_back(Entries);
+		}
+
+		return manifest;
+	}
+};
+
+struct CLIENT_MANIFEST_ENTRY
+{
+	std::string szFile;
+	std::string szName;
+	std::int64_t szSize = 0;
+	std::string szChecksum;
+	int szFileVersion = 0;
+	int szFlags = 0;
+	std::string szPath;
+};
+
+struct CLIENT_MANIFEST
+{
+	std::string szVersion = "3";
+	std::string szServerPath = "base";
+	std::vector<CLIENT_MANIFEST_ENTRY> szFiles;
+
+	static CLIENT_MANIFEST Parse(const std::string& content)
+	{
+		CLIENT_MANIFEST manifest;
+
+		manifest.szVersion = "3";
+		manifest.szServerPath = "base";
+
+		if (content.empty())
+			return manifest;
+
+		CLIENT_MANIFEST_ENTRY Entries;
+		bool hasEntry = false;
+
+		for (const auto& rawLine : winrt::CLauncher::Core::Helper::SPLIT_LINES(content))
+		{
+			const std::string line = winrt::CLauncher::Core::Helper::TRIM(rawLine);
+
+			if (line.empty())
+			{
+				continue;
+			}
+
+			const auto index = line.find('=');
+
+			if (index == std::string::npos)
+			{
+				continue;
+			}
+
+			const std::string key = winrt::CLauncher::Core::Helper::TO_LOWER(winrt::CLauncher::Core::Helper::TRIM(line.substr(0, index)));
+			const std::string value = winrt::CLauncher::Core::Helper::TRIM(line.substr(index + 1));
+
+			if (key == "version")
+			{
+				manifest.szVersion = value;
+			}
+			else if (key == "serverpath")
+			{
+				manifest.szServerPath = value;
+			}
+			else if (key == "file")
+			{
+				if (hasEntry)
+				{
+					manifest.szFiles.push_back(Entries);
+				}
+
+				Entries = CLIENT_MANIFEST_ENTRY{};
+				Entries.szFile = value;
+				Entries.szName = value;
+				Entries.szPath = "base";
+				hasEntry = true;
+			}
+			else if (key == ("name"))
+			{
+				if (hasEntry)
+				{
+					Entries.szName = value;
+				}
+			}
+			else if (key == "size")
+			{
+				if (hasEntry)
+				{
+					std::int64_t size{};
+
+					if (winrt::CLauncher::Core::Helper::TRY_PARSE_INT64(value, size))
+					{
+						Entries.szSize = size;
+					}
+				}
+			}
+			else if (key == "checksum")
+			{
+				if (hasEntry)
+				{
+					Entries.szChecksum = value;
 				}
 			}
 			else if (key == "fileversion")
@@ -1092,6 +1046,11 @@ struct ChecksumHelper
 
 			return 0;
 		}
+	}
+
+	static std::string CALCULATE_MD5(const std::filesystem::path& path)
+	{
+		return winrt::CLauncher::Core::Helper::CALCULATE_MD5(path);
 	}
 };
 

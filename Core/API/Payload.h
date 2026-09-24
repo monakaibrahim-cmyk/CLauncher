@@ -6,6 +6,7 @@
 #include <chrono>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <random>
 #include <sstream>
 #include <string>
@@ -23,6 +24,12 @@ namespace winrt::CLauncher::Core::API
 	public:
 		static size_t WriteCallBack(void* contents, size_t size, size_t nmemb, std::string* output);
 		static std::string REQUEST_TOKEN();
+		static std::string GET_OR_REQUEST_TOKEN(bool forceRefresh = false);
+		static void CLEAR_TOKEN();
 		[[nodiscard]] static bool SEND_PAYLOAD(const std::string& username, const std::string& password);
+
+	private:
+		static inline std::string szCachedToken;
+		static inline std::mutex szTokenMutex;
 	};
 }

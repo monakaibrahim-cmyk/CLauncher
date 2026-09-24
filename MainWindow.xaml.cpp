@@ -22,6 +22,22 @@ namespace winrt::CLauncher::implementation
         SetTitleBar(AppTitleBar());
 
         LOG_INFO("Initialized.");
+
+        // Automatically start checking for updates on startup
+        StartUpdateCheck();
+    }
+
+    MainWindow::~MainWindow()
+    {
+        if (m_downloader)
+        {
+            m_downloader->CANCEL();
+        }
+
+        if (m_workerThread.joinable())
+        {
+            m_workerThread.join();
+        }
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -265,6 +281,183 @@ namespace winrt::CLauncher::implementation
     }
 
     // ═══════════════════════════════════════════════════════════
+    //                 CLIENT UPDATE WORKFLOW
+    // ═══════════════════════════════════════════════════════════
+
+    void MainWindow::StartUpdateCheck()
+    {
+        if (m_state == LauncherState::Downloading || m_state == LauncherState::CheckingUpdate)
+        {
+            return;
+        }
+
+        SetLauncherState(LauncherState::CheckingUpdate);
+
+        std::filesystem::path targetDirectory = winrt::CLauncher::Core::Helper::GET_ROOT_DIRECTORY();
+        hstring configuredPath = GamePathTextBox().Text();
+        if (!configuredPath.empty())
+        {
+            std::filesystem::path p = configuredPath.c_str();
+            if (p.has_parent_path())
+            {
+                targetDirectory = p.parent_path();
+            }
+        }
+
+        if (m_workerThread.joinable())
+        {
+            m_workerThread.join();
+        }
+
+        m_workerThread = std::thread([this, targetDirectory]()
+        {
+            RunUpdateWorkflow(targetDirectory);
+        });
+    }
+
+    void MainWindow::RunUpdateWorkflow(std::filesystem::path targetDirectory)
+    {
+        try
+        {
+            auto queue = DispatcherQueue();
+            if (!m_downloader)
+            {
+                m_downloader = std::make_shared<winrt::CLauncher::Core::API::Downloader>(targetDirectory);
+            }
+            else
+            {
+                m_downloader->SET_TARGET_DIRECTORY(targetDirectory);
+            }
+
+            m_downloader->SET_STATUS_CALLBACK([this, queue](const std::string& message)
+            {
+                queue.TryEnqueue([this, message]()
+                {
+                    std::wstring wideMessage(message.begin(), message.end());
+                    if (m_state == LauncherState::CheckingUpdate)
+                    {
+                        StatusText().Text(wideMessage);
+                    }
+                    else if (m_state == LauncherState::Downloading)
+                    {
+                        DownloadStatusText().Text(wideMessage);
+                    }
+                });
+            });
+
+            m_downloader->SET_PROGRESS_CALLBACK([this, queue](uint64_t bytesReceived, uint64_t totalBytes, double /*speedMBs*/, const std::string& currentFileName)
+            {
+                queue.TryEnqueue([this, bytesReceived, totalBytes, currentFileName]()
+                {
+                    UpdateProgressUI(bytesReceived, totalBytes);
+                    if (!currentFileName.empty())
+                    {
+                        std::wstring wideName(currentFileName.begin(), currentFileName.end());
+                        DownloadStatusText().Text(L"Downloading " + wideName);
+                    }
+                });
+            });
+
+            // Step 1: Fetch client manifest
+            if (!m_downloader->FETCH_CLIENT_MANIFEST())
+            {
+                queue.TryEnqueue([this]()
+                {
+                    StatusText().Text(L"Failed to fetch update manifest");
+                    SetLauncherState(LauncherState::Ready);
+                });
+                return;
+            }
+
+            if (m_downloader->IS_CANCELLED())
+            {
+                queue.TryEnqueue([this]()
+                {
+                    SetLauncherState(LauncherState::Ready);
+                    StatusText().Text(L"Update cancelled");
+                });
+                return;
+            }
+
+            // Step 2: Check client files against manifest
+            std::vector<CLIENT_MANIFEST_ENTRY> filesToDownload;
+            uint64_t totalBytes = 0;
+
+            if (!m_downloader->CHECK_CLIENT_FILES(filesToDownload, totalBytes))
+            {
+                queue.TryEnqueue([this]()
+                {
+                    StatusText().Text(L"File verification failed");
+                    SetLauncherState(LauncherState::Ready);
+                });
+                return;
+            }
+
+            if (filesToDownload.empty())
+            {
+                queue.TryEnqueue([this]()
+                {
+                    SetLauncherState(LauncherState::Ready);
+                    StatusText().Text(L"Up to date");
+                });
+                return;
+            }
+
+            // Step 3: Transition to Downloading
+            m_lastBytes = 0;
+            m_lastSpeedTime = std::chrono::steady_clock::now();
+
+            queue.TryEnqueue([this, totalBytes]()
+            {
+                SetLauncherState(LauncherState::Downloading);
+                CancelButton().Visibility(Visibility::Visible);
+                UpdateProgressUI(0, totalBytes);
+            });
+
+            // Step 4: Download client files
+            bool success = m_downloader->DOWNLOAD_CLIENT_FILES(filesToDownload, totalBytes);
+
+            queue.TryEnqueue([this, success]()
+            {
+                if (m_downloader->IS_CANCELLED())
+                {
+                    SetLauncherState(LauncherState::Ready);
+                    StatusText().Text(L"Download cancelled");
+                }
+                else if (success)
+                {
+                    SetLauncherState(LauncherState::Installing);
+                    DownloadStatusText().Text(L"Client files verified");
+
+                    DispatcherTimer timer;
+                    timer.Interval(std::chrono::milliseconds(800));
+                    timer.Tick([this, timer](auto&&, auto&&) mutable
+                    {
+                        timer.Stop();
+                        SetLauncherState(LauncherState::Ready);
+                        StatusText().Text(L"Up to date");
+                    });
+                    timer.Start();
+                }
+                else
+                {
+                    SetLauncherState(LauncherState::Ready);
+                    StatusText().Text(L"Download failed");
+                }
+            });
+        }
+        catch (const std::exception& e)
+        {
+            LOG_ERROR("RunUpdateWorkflow exception: {}", e.what());
+            DispatcherQueue().TryEnqueue([this]()
+            {
+                SetLauncherState(LauncherState::Ready);
+                StatusText().Text(L"Update error");
+            });
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
     //                    EVENT HANDLERS
     // ═══════════════════════════════════════════════════════════
 
@@ -279,6 +472,10 @@ namespace winrt::CLauncher::implementation
     void MainWindow::CancelDownload_Click(IInspectable const&, RoutedEventArgs const&)
     {
         m_downloadCancelled = true;
+        if (m_downloader)
+        {
+            m_downloader->CANCEL();
+        }
     }
 
     void MainWindow::SettingsButton_Click(IInspectable const&, RoutedEventArgs const&)
@@ -293,7 +490,7 @@ namespace winrt::CLauncher::implementation
 
         if (m_state == LauncherState::Ready)
         {
-            StartSimulatedDownload();
+            StartUpdateCheck();
         }
     }
 }

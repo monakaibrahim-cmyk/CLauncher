@@ -18,6 +18,9 @@
     <ClCompile Include="Core\API\Payload.cpp">
       <Filter>Core\API</Filter>
     </ClCompile>
+    <ClCompile Include="Core\API\Downloader.cpp">
+      <Filter>Core\API</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
@@ -35,6 +38,9 @@
     </ClInclude>
     <ClInclude Include="resource.h" />
     <ClInclude Include="Core\API\Payload.h">
+      <Filter>Core\API</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\API\Downloader.h">
       <Filter>Core\API</Filter>
     </ClInclude>
   </ItemGroup>

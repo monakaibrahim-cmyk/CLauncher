@@ -60,12 +60,46 @@ namespace winrt::CLauncher::Core::API
 			}
 		}
 
+#ifndef NDEBUG
+		if (!winrt::CLauncher::Core::Globals::DEBUG_AUTH_TOKEN.empty())
+		{
+			LOG_DEBUG("Using DEBUG_AUTH_TOKEN for testing: {}", winrt::CLauncher::Core::Globals::DEBUG_AUTH_TOKEN);
+			return winrt::CLauncher::Core::Globals::DEBUG_AUTH_TOKEN;
+		}
+#endif
+
 		return {};
+	}
+
+	std::string PayLoad::GET_OR_REQUEST_TOKEN(bool forceRefresh)
+	{
+		std::lock_guard<std::mutex> lock(szTokenMutex);
+		if (!forceRefresh && !szCachedToken.empty())
+		{
+			return szCachedToken;
+		}
+
+#ifndef NDEBUG
+		if (!winrt::CLauncher::Core::Globals::DEBUG_AUTH_TOKEN.empty())
+		{
+			szCachedToken = winrt::CLauncher::Core::Globals::DEBUG_AUTH_TOKEN;
+			return szCachedToken;
+		}
+#endif
+
+		szCachedToken = REQUEST_TOKEN();
+		return szCachedToken;
+	}
+
+	void PayLoad::CLEAR_TOKEN()
+	{
+		std::lock_guard<std::mutex> lock(szTokenMutex);
+		szCachedToken.clear();
 	}
 
 	bool PayLoad::SEND_PAYLOAD(const std::string& username, const std::string& password)
 	{
-		std::string token = REQUEST_TOKEN();
+		std::string token = GET_OR_REQUEST_TOKEN();
 		
 		if (token.empty())
 		{

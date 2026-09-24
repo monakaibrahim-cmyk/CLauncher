@@ -1,12 +1,18 @@
 #pragma once
 
-#include "../Logging/Logs.h"
 #include "../Helper.h"
+#include "../Logging/Logs.h"
 
+#include <windows.h>
 #include <filesystem>
 #include <format>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <openssl/sha.h>
+#include <sstream>
 #include <string>
-#include <windows.h>
+#include <vector>
 
 enum CLIENT_PATCH_FAILURES
 {
@@ -71,6 +77,50 @@ namespace winrt::CLauncher::Core::Client
 			}
 
 			return {};
+		}
+
+		static inline std::string GET_EXECUTABLE_CHECKSUM(const std::filesystem::path& executable)
+		{
+			std::ifstream file(executable, std::ios::binary);
+
+			if (!file.is_open())
+			{
+				throw std::runtime_error("Failed to open executable " + executable.string());
+			}
+
+			SHA256_CTX sha256;
+
+			if (!SHA256_Init(&sha256))
+			{
+				throw std::runtime_error("Failed to initialize SHA256 context");
+			}
+
+			constexpr std::size_t size = 4096;
+			std::vector<char> buffer(size);
+
+			while (file.read(buffer.data(), size) || file.gcount() > 0)
+			{
+				if (!SHA256_Update(&sha256, buffer.data(), file.gcount()))
+				{
+					throw std::runtime_error("Failed to update SHA256 hash");
+				}
+			}
+
+			unsigned char hash[SHA256_DIGEST_LENGTH];
+
+			if (!SHA256_Final(hash, &sha256))
+			{
+				throw std::runtime_error("Failed to finalize SHA256 hash");
+			}
+
+			std::stringstream output;
+
+			for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i)
+			{
+				output << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
+			}
+
+			return output.str();
 		}
 
 		static inline bool APPLY_CLIENT_PATCH_MODIFICATION(const char* path)

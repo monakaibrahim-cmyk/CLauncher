@@ -11,4 +11,7 @@
     <Platform Solution="*|ARM64" Project="x64" />
     <Platform Solution="*|x64" Project="Win32" />
   </Project>
+  <Project Path="mFIL Generator/mFIL Generator.vcxproj" Id="6c4f33e3-b98a-475d-acac-65e678c52ed1">
+    <Platform Solution="*|ARM64" Project="x64" />
+  </Project>
 </Solution>
